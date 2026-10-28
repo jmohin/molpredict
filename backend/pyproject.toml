@@ -1,0 +1,21 @@
+[project]
+name = "molpredict-backend"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "jmohin", email = "jmohin@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "admet-ai>=2.0.1",
+    "fastapi>=0.162.0",
+    "rdkit>=2026.9.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+molpredict-backend = "molpredict_backend:main"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
