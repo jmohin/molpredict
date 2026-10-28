@@ -71,6 +71,14 @@ another model about a shared property's units, or drifting between identical cal
 The frontend tests cover the flagging rules in `src/flags.ts` — disagreement thresholds, physical
 bounds, value formatting and benchmark labels.
 
+CI (`.github/workflows/ci.yml`) runs both suites on every push and pull request, plus a
+type-check and a production build of the frontend. It needs a GitHub remote to run.
+
+On Linux — CI and any deployment container — torch resolves to the CPU-only build from
+PyTorch's own index, which keeps several GB of CUDA packages out of the image. macOS keeps the
+default PyPI wheel. A CI step asserts the pin still holds, since a transitive dependency could
+quietly pull the CUDA build back in.
+
 ## API
 
 - `GET /api/models`: models, citations, and the properties each predicts.

@@ -10,6 +10,7 @@ dependencies = [
     "admet-ai>=2.0.1",
     "fastapi>=0.162.0",
     "rdkit>=2026.9.1",
+    "torch>=2.14.1",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -25,6 +26,17 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.2.0",
 ]
+
+# On Linux the default torch wheel drags in several GB of CUDA packages. Nothing here needs a
+# GPU, so Linux (CI and the deployment container) takes the CPU-only build instead. macOS keeps
+# the PyPI wheel, which is already CPU/MPS.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
