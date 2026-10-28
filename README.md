@@ -15,9 +15,9 @@ Draw a molecule, see what recently published AI models predict about it.
 | [ADMET-AI](https://github.com/swansonk14/admet_ai) (Swanson et al., *Bioinformatics* 2024) | 41 TDC ADMET endpoints, with DrugBank-approved percentiles and per-endpoint benchmark scores | MIT |
 | [SolTranNet](https://github.com/gnina/SolTranNet) (Francoeur & Koes, *JCIM* 2021) | Aqueous solubility (logS), as a second opinion on ADMET-AI's AqSolDB endpoint | Apache-2.0 |
 
-SolTranNet is vendored under `backend/src/molpredict_backend/vendor/soltrannet/` (model code,
-60 kB of weights, and its license) because the published package imports `pkg_resources`, which
-Python 3.12 removed.
+SolTranNet is vendored **unmodified** under `backend/src/molpredict_backend/vendor/soltrannet/`
+(model code, 60 kB of weights, and its Apache-2.0 license) because the published package imports
+`pkg_resources`, which Python 3.12 removed.
 
 A model only belongs here if it takes a SMILES string and answers fast enough to feel live as you
 draw. Models needing 3D coordinates, a generated conformer, or a training step of your own do not
