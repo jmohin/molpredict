@@ -1,10 +1,12 @@
 """HTTP API: list models, predict properties for one structure."""
 
+import os
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import chem
@@ -56,3 +58,10 @@ def predict(req: PredictRequest) -> dict:
     except chem.InvalidStructure as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     return {"smiles": smiles, "results": list(_predict(smiles))}
+
+
+# In the container the built frontend is served from this same app, so the browser sees one
+# origin. In development the variable is unset and Vite serves the frontend instead, proxying
+# /api here. The mount is last because it claims "/": the routes above are matched first.
+if static_dir := os.environ.get("MOLPREDICT_STATIC"):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

@@ -74,3 +74,25 @@ def test_repeated_requests_are_stable(client):
     first = client.post("/api/predict", json={"structure": ASPIRIN}).json()
     second = client.post("/api/predict", json={"structure": ASPIRIN}).json()
     assert first == second
+
+
+def test_static_mount_serves_the_frontend_without_shadowing_the_api(tmp_path, monkeypatch):
+    """In the container the built frontend is mounted at "/", which must not swallow /api."""
+    (tmp_path / "index.html").write_text("<!doctype html><title>molpredict</title>")
+    monkeypatch.setenv("MOLPREDICT_STATIC", str(tmp_path))
+
+    import importlib
+
+    import molpredict_backend.api as api
+
+    module = importlib.reload(api)
+    try:
+        with TestClient(module.app) as c:
+            assert c.get("/").status_code == 200
+            assert "molpredict" in c.get("/").text
+            assert c.get("/api/health").json()["ok"] is True
+            assert c.get("/api/models").status_code == 200
+    finally:
+        # Leave the module as the other tests found it: no static mount.
+        monkeypatch.delenv("MOLPREDICT_STATIC")
+        importlib.reload(api)

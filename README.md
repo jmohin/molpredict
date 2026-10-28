@@ -53,6 +53,28 @@ cd frontend && npm install && npm run dev
 
 Open http://localhost:5173. The dev server proxies `/api` to the backend.
 
+## Run the container
+
+One image serves both halves: the built frontend as static files, the API under `/api`. Same
+origin, so there is no CORS or proxy config to get wrong.
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8080. The build takes a few minutes the first time (the CPU torch wheel
+alone is 200 MB) and produces a ~2.4 GB image; afterwards uv's cache is reused via a build cache
+mount, so only the layers you changed rebuild.
+
+The container reads `MOLPREDICT_STATIC`, the directory of built frontend files to serve at `/`.
+It is unset in development, where Vite serves the frontend instead, and the mount is declared
+after the API routes so it cannot shadow them.
+
+Startup is dominated by loading the ADMET-AI ensembles — about 8 seconds before the first
+request is answered, then ~0.1 s per prediction. Anywhere this is deployed needs roughly 2 GB of
+memory, and a host that stops idle instances pays that 8 seconds again on the first request
+after a wake-up.
+
 ## Tests
 
 ```bash
@@ -72,7 +94,9 @@ The frontend tests cover the flagging rules in `src/flags.ts` — disagreement t
 bounds, value formatting and benchmark labels.
 
 CI (`.github/workflows/ci.yml`) runs both suites on every push and pull request, plus a
-type-check and a production build of the frontend. It needs a GitHub remote to run.
+type-check and a production build of the frontend, and builds the container and smoke-tests it —
+health, the served `index.html`, and a real prediction through the API. It needs a GitHub remote
+to run.
 
 On Linux — CI and any deployment container — torch resolves to the CPU-only build from
 PyTorch's own index, which keeps several GB of CUDA packages out of the image. macOS keeps the

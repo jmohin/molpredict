@@ -61,3 +61,39 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  container:
+    # The deployable artifact. Building it here catches a broken image before it is pushed
+    # anywhere, and the smoke test proves the frontend and API really are served together.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: molpredict:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run -d --name mp -p 8080:8000 molpredict:ci
+          # Loading the ADMET-AI ensembles takes several seconds.
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8080/api/health && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/api/health | grep '"models":3'
+          curl -sf http://127.0.0.1:8080/ | grep -q '<div id="root">'
+          curl -sf -X POST http://127.0.0.1:8080/api/predict \
+            -H 'content-type: application/json' \
+            -d '{"structure":"CC(=O)Oc1ccccc1C(=O)O"}' | grep -q 'Solubility_AqSolDB'
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs mp

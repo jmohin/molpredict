@@ -1,0 +1,7 @@
+# Runs the whole app — built frontend and API — the way the deployed container does:
+#   docker compose up --build   then open http://localhost:8080
+services:
+  molpredict:
+    build: .
+    ports:
+      - "8080:8000"
