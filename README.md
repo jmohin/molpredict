@@ -53,6 +53,24 @@ cd frontend && npm install && npm run dev
 
 Open http://localhost:5173. The dev server proxies `/api` to the backend.
 
+## Tests
+
+```bash
+cd backend && uv run pytest
+```
+
+```bash
+cd frontend && npm test
+```
+
+The backend tests cover structure parsing (salts, charges, molfiles, junk input), a contract every
+predictor must honour, and the HTTP API. The contract tests are what catch a new model
+misbehaving: predicting an undeclared property, returning a non-finite value, disagreeing with
+another model about a shared property's units, or drifting between identical calls.
+
+The frontend tests cover the flagging rules in `src/flags.ts` — disagreement thresholds, physical
+bounds, value formatting and benchmark labels.
+
 ## API
 
 - `GET /api/models`: models, citations, and the properties each predicts.

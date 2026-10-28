@@ -1,53 +1,12 @@
-import type { ModelInfo, PredictResponse, PropertyInfo } from './api'
-
-type Value = {
-  model: ModelInfo
-  // This model's own metadata for the property, which carries its own benchmark score.
-  prop: PropertyInfo
-  value: number
-  percentile: number | null
-  warning: string | null
-}
-type Row = { prop: PropertyInfo; values: Value[] }
-
-// How far two models must be apart before we call it a disagreement. Classification values are
-// probabilities, so the gap is absolute; regression targets here are mostly log-scale, where one
-// unit is an order of magnitude.
-const DISAGREEMENT_THRESHOLD = { classification: 0.2, regression: 1.0 }
-
-function disagreement(row: Row): number | null {
-  if (row.values.length < 2) return null
-  const values = row.values.map((v) => v.value)
-  const spread = Math.max(...values) - Math.min(...values)
-  const limit =
-    row.prop.task_type === 'classification'
-      ? DISAGREEMENT_THRESHOLD.classification
-      : DISAGREEMENT_THRESHOLD.regression
-  return spread > limit ? spread : null
-}
-
-function outOfRange(prop: PropertyInfo, value: number): string | null {
-  if (prop.minimum != null && value < prop.minimum) return `below the possible minimum of ${prop.minimum}`
-  if (prop.maximum != null && value > prop.maximum) return `above the possible maximum of ${prop.maximum}`
-  return null
-}
-
-const CATEGORY_ORDER = ['Physicochemical', 'Absorption', 'Distribution', 'Metabolism', 'Excretion', 'Toxicity']
-
-function formatValue(prop: PropertyInfo, value: number): string {
-  if (prop.task_type === 'classification') return `${Math.round(value * 100)}%`
-  if (prop.units === 'count') return String(Math.round(value))
-  const abs = Math.abs(value)
-  return abs >= 100 ? value.toFixed(0) : abs >= 10 ? value.toFixed(1) : value.toFixed(2)
-}
-
-function benchmarkLabel(prop: PropertyInfo): string | null {
-  const b = prop.benchmark
-  if (b.AUROC != null) return `AUROC ${b.AUROC.toFixed(2)}`
-  if (b['R^2'] != null) return `R² ${b['R^2'].toFixed(2)}`
-  if (b.MAE != null) return `MAE ${b.MAE.toFixed(2)}`
-  return null
-}
+import type { ModelInfo, PredictResponse } from './api'
+import {
+  benchmarkLabel,
+  disagreement,
+  formatValue,
+  outOfRange,
+  compareCategories,
+  type Row,
+} from './flags'
 
 function buildRows(models: ModelInfo[], data: PredictResponse): Map<string, Row[]> {
   const byModel = new Map(models.map((m) => [m.id, m]))
@@ -76,11 +35,7 @@ function buildRows(models: ModelInfo[], data: PredictResponse): Map<string, Row[
     list.push(row)
     grouped.set(row.prop.category, list)
   }
-  return new Map(
-    [...grouped].sort(
-      ([a], [b]) => (CATEGORY_ORDER.indexOf(a) + 99) % 99 - (CATEGORY_ORDER.indexOf(b) + 99) % 99,
-    ),
-  )
+  return new Map([...grouped].sort(([a], [b]) => compareCategories(a, b)))
 }
 
 export function Results({ models, data }: { models: ModelInfo[]; data: PredictResponse }) {
