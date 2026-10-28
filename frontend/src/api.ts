@@ -7,6 +7,8 @@ export type PropertyInfo = {
   description: string
   benchmark: Record<string, number>
   dataset_url: string
+  minimum: number | null
+  maximum: number | null
 }
 
 export type ModelInfo = {
@@ -24,6 +26,7 @@ export type Prediction = {
   property_id: string
   value: number
   drugbank_percentile: number | null
+  warning: string | null
 }
 
 export type PredictResponse = {

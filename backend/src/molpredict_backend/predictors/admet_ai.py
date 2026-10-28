@@ -11,6 +11,14 @@ from .base import ModelInfo, Prediction, PropertyInfo
 _METRICS = ("AUROC", "AUPRC", "R^2", "MAE")
 
 
+def _bound(raw: str) -> float | None:
+    """admet.csv writes unbounded limits as ±inf; treat those as "no bound"."""
+    if not raw:
+        return None
+    value = float(raw)
+    return None if math.isinf(value) else value
+
+
 def _load_properties() -> list[PropertyInfo]:
     path = resources.files("admet_ai") / "resources" / "data" / "admet.csv"
     with path.open() as f:
@@ -24,6 +32,8 @@ def _load_properties() -> list[PropertyInfo]:
             task_type=r["task_type"],
             benchmark={m: float(r[m]) for m in _METRICS if r[m]},
             dataset_url=r["url"],
+            minimum=_bound(r["minimum"]),
+            maximum=_bound(r["maximum"]),
         )
         for r in rows
     ]

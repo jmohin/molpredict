@@ -13,11 +13,31 @@ Draw a molecule, see what recently published AI models predict about it.
 |---|---|---|
 | RDKit descriptors | MW, cLogP, TPSA, HBD/HBA, QED, Lipinski… (rule-based reference, not ML) | BSD-3 |
 | [ADMET-AI](https://github.com/swansonk14/admet_ai) (Swanson et al., *Bioinformatics* 2024) | 41 TDC ADMET endpoints, with DrugBank-approved percentiles and per-endpoint benchmark scores | MIT |
+| [SolTranNet](https://github.com/gnina/SolTranNet) (Francoeur & Koes, *JCIM* 2021) | Aqueous solubility (logS), as a second opinion on ADMET-AI's AqSolDB endpoint | Apache-2.0 |
+
+SolTranNet is vendored under `backend/src/molpredict_backend/vendor/soltrannet/` (model code,
+60 kB of weights, and its license) because the published package imports `pkg_resources`, which
+Python 3.12 removed.
+
+A model only belongs here if it takes a SMILES string and answers fast enough to feel live as you
+draw. Models needing 3D coordinates, a generated conformer, or a training step of your own do not
+fit this UI.
 
 Add a model by implementing the `Predictor` protocol in
 `backend/src/molpredict_backend/predictors/base.py` and listing it in `predictors/__init__.py`.
 Use the same `property_id` as an existing model when predicting the same property; the UI then
-shows the two models side by side.
+shows the two models side by side and flags it when they disagree.
+
+## Reading the results
+
+- **vs. approved drugs** places the value among DrugBank approved drugs, as scored by that model.
+- **models disagree by N** appears when two models differ by more than 0.2 (probabilities) or
+  1.0 (regression units, mostly log scale).
+- **out of range** means the model extrapolated past a physically possible bound — a negative
+  half-life, say. The raw value is still shown.
+- **limited training data** is the model's own caveat about this molecule.
+- The benchmark score next to each model is that model's reported held-out performance for that
+  property. Some are poor: ADMET-AI reports R² of −2.39 for half-life.
 
 ## Run locally
 

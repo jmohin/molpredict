@@ -1,8 +1,35 @@
 import type { ModelInfo, PredictResponse, PropertyInfo } from './api'
 
-type Row = {
+type Value = {
+  model: ModelInfo
+  // This model's own metadata for the property, which carries its own benchmark score.
   prop: PropertyInfo
-  values: { model: ModelInfo; value: number; percentile: number | null }[]
+  value: number
+  percentile: number | null
+  warning: string | null
+}
+type Row = { prop: PropertyInfo; values: Value[] }
+
+// How far two models must be apart before we call it a disagreement. Classification values are
+// probabilities, so the gap is absolute; regression targets here are mostly log-scale, where one
+// unit is an order of magnitude.
+const DISAGREEMENT_THRESHOLD = { classification: 0.2, regression: 1.0 }
+
+function disagreement(row: Row): number | null {
+  if (row.values.length < 2) return null
+  const values = row.values.map((v) => v.value)
+  const spread = Math.max(...values) - Math.min(...values)
+  const limit =
+    row.prop.task_type === 'classification'
+      ? DISAGREEMENT_THRESHOLD.classification
+      : DISAGREEMENT_THRESHOLD.regression
+  return spread > limit ? spread : null
+}
+
+function outOfRange(prop: PropertyInfo, value: number): string | null {
+  if (prop.minimum != null && value < prop.minimum) return `below the possible minimum of ${prop.minimum}`
+  if (prop.maximum != null && value > prop.maximum) return `above the possible maximum of ${prop.maximum}`
+  return null
 }
 
 const CATEGORY_ORDER = ['Physicochemical', 'Absorption', 'Distribution', 'Metabolism', 'Excretion', 'Toxicity']
@@ -33,7 +60,13 @@ function buildRows(models: ModelInfo[], data: PredictResponse): Map<string, Row[
       const prop = props.get(p.property_id)
       if (!prop) continue
       const row = rows.get(prop.id) ?? { prop, values: [] }
-      row.values.push({ model, value: p.value, percentile: p.drugbank_percentile })
+      row.values.push({
+        model,
+        prop,
+        value: p.value,
+        percentile: p.drugbank_percentile,
+        warning: p.warning,
+      })
       rows.set(prop.id, row)
     }
   }
@@ -84,9 +117,21 @@ export function Results({ models, data }: { models: ModelInfo[]; data: PredictRe
                         <div className="muted">
                           {row.prop.task_type === 'classification' ? 'probability' : row.prop.units}
                         </div>
+                        {disagreement(row) != null && (
+                          <div className="flag" title="The models below differ by more than this property's agreement threshold.">
+                            models disagree by {disagreement(row)!.toFixed(2)}
+                          </div>
+                        )}
                       </td>
                     )}
-                    <td className="num value">{formatValue(row.prop, v.value)}</td>
+                    <td className="num value">
+                      {formatValue(row.prop, v.value)}
+                      {outOfRange(row.prop, v.value) && (
+                        <span className="flag" title={`This value is ${outOfRange(row.prop, v.value)}, so the model has extrapolated outside the physically possible range.`}>
+                          out of range
+                        </span>
+                      )}
+                    </td>
                     <td>
                       {v.percentile != null && (
                         <div className="pct" title={`${v.percentile.toFixed(0)}th percentile of DrugBank approved drugs`}>
@@ -99,7 +144,8 @@ export function Results({ models, data }: { models: ModelInfo[]; data: PredictRe
                     </td>
                     <td>
                       <div>{v.model.name}</div>
-                      {benchmarkLabel(row.prop) && <div className="muted">{benchmarkLabel(row.prop)}</div>}
+                      {benchmarkLabel(v.prop) && <div className="muted">{benchmarkLabel(v.prop)}</div>}
+                      {v.warning && <div className="flag" title={v.warning}>limited training data</div>}
                     </td>
                   </tr>
                 )),

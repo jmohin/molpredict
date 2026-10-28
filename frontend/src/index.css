@@ -63,3 +63,6 @@ footer h2 { font-size: 1.1rem; }
 .models p { margin: 6px 0; font-size: 0.9rem; }
 .links { display: flex; gap: 12px; }
 .disclaimer { margin-top: 20px; }
+
+.flag { display: block; margin-top: 2px; font-size: 0.72rem; font-weight: 500; color: #b45309; cursor: help; }
+td.value .flag { font-weight: 500; }
