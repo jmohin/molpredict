@@ -11,6 +11,7 @@ some chemicals.
 """
 
 import csv
+import io
 import math
 import statistics
 import sys
@@ -40,13 +41,24 @@ class Endpoint:
     units: str
     task: str = "regression"
     log10: bool = False  # take log10 of the value first
+    # OPERA's "2.9 update" tables, which are almost entirely molecules the SDFs do not carry.
+    update: str = ""
+    # Physically plausible bounds. The update tables hold a handful of impossible entries — a
+    # melting point of 3536 degC, hotter than tungsten — and an outlier like that distorts both
+    # the z-scoring and an MSE loss out of proportion to its count.
+    low: float = -float("inf")
+    high: float = float("inf")
 
 
 ENDPOINTS = [
-    Endpoint("boiling_point", "BP_QR.sdf", "BP", "degC"),
-    Endpoint("melting_point", "MP_QR.sdf", "MP", "degC"),
-    # Already log10(mmHg) in the file.
-    Endpoint("vapor_pressure", "VP_QR.sdf", "LogVP", "log10(mmHg)"),
+    Endpoint("boiling_point", "BP_QR.sdf", "BP", "degC", update="BP_2.9_update.csv",
+             low=-273.15, high=700.0),
+    Endpoint("melting_point", "MP_QR.sdf", "MP", "degC", update="MP_2.9_update.csv",
+             low=-273.15, high=600.0),
+    # Already log10(mmHg) in the SDF — and in the update table too, despite its `unit` column
+    # reading "mmHg": those values run from -16 to 4.4, and a pressure cannot be negative.
+    # Taking a log here, as the column name invites, would ruin the dataset.
+    Endpoint("vapor_pressure", "VP_QR.sdf", "LogVP", "log10(mmHg)", update="VP_2.9_update.csv"),
     Endpoint(
         "ready_biodegradability",
         "RBiodeg_QR.sdf",
@@ -89,7 +101,7 @@ def records(archive: Path, endpoint: Endpoint):
                 if value <= 0:
                     continue
                 value = math.log10(value)
-            if not math.isfinite(value):
+            if not math.isfinite(value) or not (endpoint.low <= value <= endpoint.high):
                 continue
             try:
                 # The SDF holds the QSAR-ready structure; this puts it in exactly the form the
@@ -100,10 +112,36 @@ def records(archive: Path, endpoint: Endpoint):
             yield smiles, value
 
 
+def update_records(archive: Path, endpoint: Endpoint):
+    """Yield (standardised smiles, value) from the endpoint's 2.9 update table."""
+    with zipfile.ZipFile(archive) as zf, zf.open(endpoint.update) as handle:
+        text = io.TextIOWrapper(handle, encoding="utf-8", errors="replace")
+        for row in csv.DictReader(text):
+            raw = (row.get("value_point_estimate") or "").strip()
+            smiles_in = (row.get("Original_SMILES") or row.get("Canonical_QSARr") or "").strip()
+            if not raw or not smiles_in:
+                continue
+            try:
+                value = float(raw)
+            except ValueError:
+                continue
+            if not (endpoint.low <= value <= endpoint.high):
+                continue
+            try:
+                smiles = chem.canonical_smiles(smiles_in)
+            except Exception:
+                continue
+            yield smiles, value
+
+
 def build(endpoint: Endpoint, archive: Path) -> Path:
     by_smiles: dict[str, list[float]] = {}
     for smiles, value in records(archive, endpoint):
         by_smiles.setdefault(smiles, []).append(value)
+    from_sdf = len(by_smiles)
+    if endpoint.update:
+        for smiles, value in update_records(archive, endpoint):
+            by_smiles.setdefault(smiles, []).append(value)
 
     collisions = sum(1 for v in by_smiles.values() if len(v) > 1)
     rows = []
@@ -130,9 +168,11 @@ def build(endpoint: Endpoint, archive: Path) -> Path:
         if endpoint.task == "regression"
         else f"positives {sum(values)}/{len(values)} ({100 * statistics.fmean(values):.0f}%)"
     )
+    added = len(by_smiles) - from_sdf
     print(
         f"{endpoint.name:24} {len(rows):6d} molecules  "
-        f"({collisions} merged duplicates)  {spread}  [{endpoint.units}]"
+        f"(+{added} from the 2.9 table, {collisions} merged duplicates)  "
+        f"{spread}  [{endpoint.units}]"
     )
     return path
 

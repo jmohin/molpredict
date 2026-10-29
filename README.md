@@ -66,17 +66,45 @@ Held-out scores on that split, which are the numbers the UI shows:
 
 | Endpoint | Molecules | Score | Error |
 |---|---|---|---|
-| Boiling point | 5,433 | R² 0.873 | RMSE 35.3 °C |
-| Vapor pressure | 2,815 | R² 0.838 | RMSE 1.64 log units |
-| Melting point | 8,641 | R² 0.781 | RMSE 51.2 °C |
+| Boiling point | 7,801 | R² 0.770 | RMSE 53.7 °C |
+| Melting point | 22,287 | R² 0.764 | RMSE 56.3 °C |
+| Vapor pressure | 6,643 | R² 0.691 | RMSE 2.20 log units |
 | Ready biodegradability | 1,600 | AUROC 0.899 | accuracy 0.800 |
 | Rat oral LD50 | 11,168 | R² 0.505 | RMSE 0.60 log units |
 | Acidic pKa | 3,154 | R² 0.687 | RMSE 1.98 |
 | Basic pKa | 5,103 | R² 0.810 | RMSE 2.05 |
 
-Two of these deserve a caveat the number alone does not give. **Melting point** is the weakest:
-it depends on how molecules pack in a crystal, which a 2D graph cannot see, so symmetric
-molecules are badly under-predicted — naphthalene comes out near 5 °C against a real 80 °C.
+The first three scores are **lower than the ones they replaced** while the models behind them are
+better, which is worth spelling out because the opposite reading is the natural one. OPERA ships
+"2.9 update" tables that are almost entirely molecules its SDFs do not carry, and merging them
+grew melting point from 8,641 molecules to 22,287, vapor pressure from 2,815 to 6,643 and
+boiling point from 5,433 to 7,801. That changes the scaffold split, so the held-out set is new
+chemistry and a harder exam. The column above is each model's score on its own test set, and
+across a change of dataset those are not comparable.
+
+Scored instead on molecules that are honest for both — the new test set minus everything the old
+model had in training or validation — the extra data wins every endpoint:
+
+| Endpoint | Common test molecules | Old R² | New R² | Old RMSE | New RMSE |
+|---|---|---|---|---|---|
+| Boiling point | 445 | 0.655 | **0.712** | 70.2 °C | **64.2 °C** |
+| Melting point | 1,451 | 0.713 | **0.731** | 62.0 °C | **60.0 °C** |
+| Vapor pressure | 459 | 0.561 | **0.627** | 2.64 | **2.43** |
+
+Both models score well below their headline numbers there, which is the point of that subset: it
+is the hardest slice available, excluding every scaffold family either model was trained on.
+
+The other four endpoints kept their earlier weights. They gained no data — OPERA has no more,
+and CATMoS's remaining 39,000 structures are its own predictions rather than measurements — so
+the only lever left was the training recipe, and a cosine learning-rate decay made three of the
+four slightly worse (acidic pKa R² 0.687 → 0.656, basic pKa 0.810 → 0.792, biodegradability
+AUROC 0.899 → 0.895, LD50 0.5045 → 0.509). With identical data, splits and seeds that is a clean
+negative result, so it was not shipped for them.
+
+Two endpoints deserve a caveat the number alone does not give. **Melting point** carries the
+largest absolute error: it depends on how molecules pack in a crystal, which a 2D graph cannot
+see, so symmetric molecules are badly under-predicted — naphthalene comes out near 5 °C against
+a real 80 °C.
 And the **pKa** models answer for any structure, so a molecule with no acidic proton still gets
 an acidic pKa; the number is meaningless there rather than merely large. Both caveats are shown
 in the UI next to the property.

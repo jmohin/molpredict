@@ -232,6 +232,12 @@ def train(endpoint: str, task: str, epochs: int = 100, batch_size: int = 32) -> 
     optimizer = torch.optim.Adam(
         [{"params": base, "lr": 1e-4}, {"params": head, "lr": 5e-4}], weight_decay=1e-6
     )
+    # Decaying to near zero lets the last epochs settle instead of bouncing around the minimum.
+    # Measured, not assumed: on the four endpoints whose data did not change it made three
+    # slightly worse (both pKa models and biodegradability) and one marginally better, so it is
+    # no improvement. It stays only because it is what produced the three checkpoints currently
+    # shipped, and removing it would stop this file reproducing them.
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.CrossEntropyLoss() if task == "classification" else nn.MSELoss()
 
     best_score, best_state, best_epoch = math.inf, None, -1
@@ -248,6 +254,8 @@ def train(endpoint: str, task: str, epochs: int = 100, batch_size: int = 32) -> 
             )
             loss.backward()
             optimizer.step()
+
+        scheduler.step()
 
         preds, actual = evaluate(model, graphs, valid_idx, task, mean, std)
         if task == "regression":

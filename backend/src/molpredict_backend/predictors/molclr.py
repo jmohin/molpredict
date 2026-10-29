@@ -40,9 +40,9 @@ _PROPERTIES = {
         units="°C",
         task_type="regression",
         description=(
-            "The weakest of these models. Melting point depends on how molecules pack in a "
-            "crystal, which a 2D graph cannot see — symmetric molecules like naphthalene are "
-            "badly under-predicted. Read it alongside its error, not on its own."
+            "Carries the largest absolute error here. Melting point depends on how molecules "
+            "pack in a crystal, which a 2D graph cannot see — symmetric molecules like "
+            "naphthalene are badly under-predicted. Read it alongside its error, not on its own."
         ),
         dataset_url="https://doi.org/10.1186/s13321-018-0263-1",
         minimum=-273.15,
