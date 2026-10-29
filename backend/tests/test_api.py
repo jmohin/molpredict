@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from molpredict_backend.api import app
+from molpredict_backend.api import app, mount_frontend
 
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 
@@ -76,23 +76,21 @@ def test_repeated_requests_are_stable(client):
     assert first == second
 
 
-def test_static_mount_serves_the_frontend_without_shadowing_the_api(tmp_path, monkeypatch):
+def test_static_mount_does_not_shadow_the_api(tmp_path, client):
     """In the container the built frontend is mounted at "/", which must not swallow /api."""
     (tmp_path / "index.html").write_text("<!doctype html><title>molpredict</title>")
-    monkeypatch.setenv("MOLPREDICT_STATIC", str(tmp_path))
-
-    import importlib
-
-    import molpredict_backend.api as api
-
-    module = importlib.reload(api)
+    mount_frontend(app, str(tmp_path))
     try:
-        with TestClient(module.app) as c:
-            assert c.get("/").status_code == 200
-            assert "molpredict" in c.get("/").text
-            assert c.get("/api/health").json()["ok"] is True
-            assert c.get("/api/models").status_code == 200
+        assert client.get("/").status_code == 200
+        assert "molpredict" in client.get("/").text
+        assert client.get("/api/health").json()["ok"] is True
+        assert len(client.get("/api/models").json()) == 3
     finally:
-        # Leave the module as the other tests found it: no static mount.
-        monkeypatch.delenv("MOLPREDICT_STATIC")
-        importlib.reload(api)
+        # The mount is the last route added; leave the app as the other tests found it.
+        app.router.routes.pop()
+
+
+def test_large_responses_are_compressed(client):
+    """The frontend bundle is ~29 MB uncompressed; nothing in front of the app compresses it."""
+    body = client.get("/api/models", headers={"accept-encoding": "gzip"})
+    assert body.headers.get("content-encoding") == "gzip"

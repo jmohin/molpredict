@@ -6,6 +6,7 @@ from dataclasses import asdict
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -23,6 +24,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="molpredict", lifespan=lifespan)
+
+# Ketcher inlines its WASM into the JS bundle, which makes it ~29 MB. Neither StaticFiles nor
+# Fly's proxy compresses, so without this every first visit downloads all of it.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 class PredictRequest(BaseModel):
@@ -63,5 +68,14 @@ def predict(req: PredictRequest) -> dict:
 # In the container the built frontend is served from this same app, so the browser sees one
 # origin. In development the variable is unset and Vite serves the frontend instead, proxying
 # /api here. The mount is last because it claims "/": the routes above are matched first.
+def mount_frontend(app: FastAPI, directory: str) -> None:
+    """Serve the built frontend at "/".
+
+    Mounting "/" claims every path, so this must run after the API routes are declared: routes
+    are matched in the order they were added.
+    """
+    app.mount("/", StaticFiles(directory=directory, html=True), name="static")
+
+
 if static_dir := os.environ.get("MOLPREDICT_STATIC"):
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    mount_frontend(app, static_dir)

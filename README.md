@@ -75,6 +75,22 @@ request is answered, then ~0.1 s per prediction. Anywhere this is deployed needs
 memory, and a host that stops idle instances pays that 8 seconds again on the first request
 after a wake-up.
 
+## Deployment
+
+Deployed to [Fly.io](https://fly.io) as a single machine in `iad`, configured in `fly.toml`.
+
+```bash
+flyctl deploy --remote-only
+```
+
+`--remote-only` builds on Fly's own builder, which is x86 — a local build on an Apple Silicon
+Mac produces an arm64 image the machine cannot run.
+
+The machine has 2 GB of memory and **suspends** when idle rather than stopping. Suspending
+snapshots its memory, so a waking machine skips the ~8 second model load; a genuinely cold start
+(first boot, or after a deploy) still pays it, which is what the health check's 60 second grace
+period is for.
+
 ## Tests
 
 ```bash

@@ -1,0 +1,25 @@
+app = 'molpredict'
+primary_region = 'iad'
+
+[build]
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_start_machines = true
+  # Loading the ADMET-AI ensembles takes ~8s, so an idle machine is suspended rather than
+  # stopped: Fly snapshots its memory and restores it, which skips that load on wake-up.
+  auto_stop_machines = 'suspend'
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    path = '/api/health'
+    interval = '30s'
+    timeout = '5s'
+    # Room for the model load on a genuinely cold start, where there is no snapshot to restore.
+    grace_period = '60s'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  # torch plus the ADMET-AI ensembles need well over 1 GB resident.
+  memory = '2gb'
