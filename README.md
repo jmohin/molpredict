@@ -14,10 +14,25 @@ Draw a molecule, see what recently published AI models predict about it.
 | RDKit descriptors | MW, cLogP, TPSA, HBD/HBA, QED, Lipinski… (rule-based reference, not ML) | BSD-3 |
 | [ADMET-AI](https://github.com/swansonk14/admet_ai) (Swanson et al., *Bioinformatics* 2024) | 41 TDC ADMET endpoints, with DrugBank-approved percentiles and per-endpoint benchmark scores | MIT |
 | [SolTranNet](https://github.com/gnina/SolTranNet) (Francoeur & Koes, *JCIM* 2021) | Aqueous solubility (logS), as a second opinion on ADMET-AI's AqSolDB endpoint | Apache-2.0 |
+| [SCScore](https://github.com/connorcoley/scscore) (Coley et al., *JCIM* 2018) | Synthetic complexity (1–5), learned from 12M Reaxys reactions | MIT |
+| [SA_Score](https://github.com/rdkit/rdkit/tree/master/Contrib/SA_Score) (Ertl & Schuffenhauer, *J. Cheminform.* 2009) | Synthetic accessibility (1–10), fragment-based heuristic | BSD-3 |
 
 SolTranNet is vendored **unmodified** under `backend/src/molpredict_backend/vendor/soltrannet/`
 (model code, 60 kB of weights, and its Apache-2.0 license) because the published package imports
 `pkg_resources`, which Python 3.12 removed.
+
+SCScore's published weights are vendored too, under `vendor/scscore/`, with its MIT license. They
+are converted from the released `.as_numpy.json.gz` to a compressed `.npz` — the checkpoint is
+float32, so the conversion is bit-exact, and it takes 6.2 MB down to 2.4 MB. The forward pass
+(five ReLU layers and a sigmoid) is rewritten rather than vendored, because the reference
+implementation is Python 2-era: it imports `six`, defaults to unpickling its own weights, and
+uses `np.bool`, removed in NumPy 1.24.
+
+The two synthesis models disagree in an interesting way, and deliberately do not share a row.
+SCScore learned complexity from reaction data, so it scores large drug-like molecules highly
+(imatinib ≈ 5.0). SA_Score penalises stereocentres, fused rings and macrocycles, so it scores
+natural products highly instead (erythromycin ≈ 6.1, where SCScore says 2.9). They answer
+different questions on different scales, so comparing the numbers directly would be a mistake.
 
 A model only belongs here if it takes a SMILES string and answers fast enough to feel live as you
 draw. Models needing 3D coordinates, a generated conformer, or a training step of your own do not

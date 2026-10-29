@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from molpredict_backend.api import app, mount_frontend
 
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
+MODEL_IDS = {"rdkit", "admet_ai", "soltrannet", "scscore", "sa_score"}
 
 
 @pytest.fixture(scope="module")
@@ -22,7 +23,7 @@ def test_health_reports_loaded_models(client):
 
 def test_models_endpoint_describes_every_property(client):
     models = client.get("/api/models").json()
-    assert {m["id"] for m in models} == {"rdkit", "admet_ai", "soltrannet"}
+    assert {m["id"] for m in models} == MODEL_IDS
     for m in models:
         assert m["properties"]
         for prop in m["properties"]:
@@ -33,7 +34,7 @@ def test_models_endpoint_describes_every_property(client):
 def test_predict_returns_canonical_smiles_and_results(client):
     body = client.post("/api/predict", json={"structure": ASPIRIN}).json()
     assert body["smiles"] == ASPIRIN
-    assert {r["model_id"] for r in body["results"]} == {"rdkit", "admet_ai", "soltrannet"}
+    assert {r["model_id"] for r in body["results"]} == MODEL_IDS
 
 
 def test_predict_canonicalizes_input(client):
@@ -84,7 +85,7 @@ def test_static_mount_does_not_shadow_the_api(tmp_path, client):
         assert client.get("/").status_code == 200
         assert "molpredict" in client.get("/").text
         assert client.get("/api/health").json()["ok"] is True
-        assert len(client.get("/api/models").json()) == 3
+        assert len(client.get("/api/models").json()) == len(MODEL_IDS)
     finally:
         # The mount is the last route added; leave the app as the other tests found it.
         app.router.routes.pop()

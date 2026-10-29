@@ -9,6 +9,13 @@ from molpredict_backend.predictors.base import Prediction
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 ETHANOL = "CCO"
 HEXADECANE = "CCCCCCCCCCCCCCCC"
+IMATINIB = "Cc1ccc(NC(=O)c2ccc(CN3CCN(C)CC3)cc2)cc1Nc1nccc(-c2cccnc2)n1"
+# Macrocyclic, sugar-bearing and full of stereocentres: the hard end of both scales.
+ERYTHROMYCIN = (
+    "CC[C@H]1OC(=O)[C@H](C)[C@@H](O[C@H]2C[C@@](C)(OC)[C@@H](O)[C@H](C)O2)[C@H](C)"
+    "[C@@H](O[C@@H]2O[C@H](C)C[C@@H]([C@H]2O)N(C)C)[C@](C)(O)C[C@@H](C)C(=O)[C@H](C)"
+    "[C@@H](O)[C@]1(C)O"
+)
 
 
 @pytest.fixture(scope="session")
@@ -108,3 +115,33 @@ def test_rdkit_descriptors_match_known_values(by_id):
     assert values["hydrogen_bond_donors"] == 1
     assert values["heavy_atoms"] == 13
     assert values["lipinski_violations"] == 0
+
+
+def test_scscore_stays_inside_its_published_range(predictors):
+    """SCScore's output is 1 + 4*sigmoid(x), so it can only ever land strictly inside 1..5."""
+    model = {p.info.id: p for p in predictors}["scscore"]
+    for smiles in [ETHANOL, ASPIRIN, IMATINIB, ERYTHROMYCIN]:
+        value = model.predict(smiles)[0].value
+        assert 1.0 < value < 5.0
+
+
+def test_scscore_ranks_a_drug_above_a_solvent(predictors):
+    """The weights are vendored and the forward pass rewritten, so check it still orders."""
+    model = {p.info.id: p for p in predictors}["scscore"]
+    assert model.predict(IMATINIB)[0].value > model.predict(ETHANOL)[0].value
+
+
+def test_sa_score_ranks_a_natural_product_above_a_simple_drug(predictors):
+    """SA_Score penalises stereocentres and unusual rings, which erythromycin has and aspirin
+    does not."""
+    model = {p.info.id: p for p in predictors}["sa_score"]
+    assert model.predict(ERYTHROMYCIN)[0].value > model.predict(ASPIRIN)[0].value
+
+
+def test_the_two_synthesis_models_do_not_share_a_property_id(predictors):
+    """They answer related questions on different scales (1-5 vs 1-10), so putting them on one
+    row would invite a comparison that isn't valid."""
+    by_id = {p.info.id: p for p in predictors}
+    assert {p.id for p in by_id["scscore"].properties}.isdisjoint(
+        {p.id for p in by_id["sa_score"].properties}
+    )

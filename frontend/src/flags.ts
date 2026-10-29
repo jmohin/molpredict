@@ -21,6 +21,8 @@ export const CATEGORY_ORDER = [
   'Metabolism',
   'Excretion',
   'Toxicity',
+  // Not part of the ADMET sequence above; it answers a different question entirely.
+  'Synthesis',
 ]
 
 export function compareCategories(a: string, b: string): number {
