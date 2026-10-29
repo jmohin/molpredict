@@ -1,10 +1,11 @@
 [project]
 name = "molpredict-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Property predictions for a drawn molecule from published AI models"
 authors = [
     { name = "jmohin", email = "jmohin@gmail.com" }
 ]
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "admet-ai>=2.0.1",

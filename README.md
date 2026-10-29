@@ -130,3 +130,16 @@ quietly pull the CUDA build back in.
 - `POST /api/predict` `{"structure": "<SMILES or molfile>"}`: canonical SMILES plus each model's predictions.
 
 Predictions are for research use only.
+
+## License
+
+Apache-2.0 (`LICENSE`) — chosen to match the only third-party source code redistributed here,
+SolTranNet, so the repository is not a mix of licenses.
+
+Everything else is a dependency, installed rather than redistributed, and keeps its own license:
+RDKit (BSD-3), ADMET-AI (MIT), Ketcher (Apache-2.0). The vendored SolTranNet files keep their
+own `LICENSE.txt` and are unmodified; upstream ships no `NOTICE` file, so there is none to
+propagate.
+
+The models' *training data* is a separate question from their code, and some datasets carry
+terms of their own. Worth checking before any commercial use.
