@@ -86,6 +86,11 @@ flyctl deploy --remote-only
 `--remote-only` builds on Fly's own builder, which is x86 — a local build on an Apple Silicon
 Mac produces an arm64 image the machine cannot run.
 
+The app gzips its own responses. Ketcher inlines its WASM, which makes the JS bundle ~29 MB,
+and neither `StaticFiles` nor Fly's proxy compresses — so without `GZipMiddleware` every first
+visit downloads all 29 MB. Compressed it is ~8.5 MB, which is still enough to be worth
+code-splitting the editor out of the initial chunk later.
+
 The machine has 2 GB of memory and **suspends** when idle rather than stopping. Suspending
 snapshots its memory, so a waking machine skips the ~8 second model load; a genuinely cold start
 (first boot, or after a deploy) still pays it, which is what the health check's 60 second grace
