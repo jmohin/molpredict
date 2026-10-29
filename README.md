@@ -16,6 +16,8 @@ Draw a molecule, see what recently published AI models predict about it.
 | [SolTranNet](https://github.com/gnina/SolTranNet) (Francoeur & Koes, *JCIM* 2021) | Aqueous solubility (logS), as a second opinion on ADMET-AI's AqSolDB endpoint | Apache-2.0 |
 | [SCScore](https://github.com/connorcoley/scscore) (Coley et al., *JCIM* 2018) | Synthetic complexity (1–5), learned from 12M Reaxys reactions | MIT |
 | [SA_Score](https://github.com/rdkit/rdkit/tree/master/Contrib/SA_Score) (Ertl & Schuffenhauer, *J. Cheminform.* 2009) | Synthetic accessibility (1–10), fragment-based heuristic | BSD-3 |
+| [MolCLR](https://github.com/yuyangw/MolCLR) (Wang et al., *Nat. Mach. Intell.* 2022), fine-tuned here | Boiling point, melting point, vapor pressure, ready biodegradability, rat oral LD50 | MIT (encoder) |
+| MolCLR fine-tuned on the [IUPAC pKa dataset](https://doi.org/10.5281/zenodo.7236453) (Zheng 2022) | Acidic and basic pKa | **CC BY-NC 4.0** |
 
 SolTranNet is vendored **unmodified** under `backend/src/molpredict_backend/vendor/soltrannet/`
 (model code, 60 kB of weights, and its Apache-2.0 license) because the published package imports
@@ -42,6 +44,82 @@ Add a model by implementing the `Predictor` protocol in
 `backend/src/molpredict_backend/predictors/base.py` and listing it in `predictors/__init__.py`.
 Use the same `property_id` as an existing model when predicting the same property; the UI then
 shows the two models side by side and flags it when they disagree.
+
+## Models trained here
+
+Every other model above is someone else's, used as published. The MolCLR row is different: it is
+MolCLR's self-supervised GIN encoder — pretrained on 10M unlabelled molecules — fine-tuned by
+this project on EPA/NIEHS [OPERA](https://github.com/NIEHS/OPERA) experimental data, one model
+per endpoint. `training/` holds the code.
+
+```bash
+cd training && uv run python prepare_data.py && uv run python train.py
+```
+
+`prepare_data.py` pulls OPERA's archive and writes one CSV per endpoint, standardising SMILES
+exactly as the API does so the model is trained on the form it will be asked about. `train.py`
+fine-tunes and writes `runs/<endpoint>/model.pt`, which carries its own held-out metrics; those
+are the numbers the UI shows beside each prediction, so a score always belongs to the model that
+earned it.
+
+Held-out scores on that split, which are the numbers the UI shows:
+
+| Endpoint | Molecules | Score | Error |
+|---|---|---|---|
+| Boiling point | 5,433 | R² 0.873 | RMSE 35.3 °C |
+| Vapor pressure | 2,815 | R² 0.838 | RMSE 1.64 log units |
+| Melting point | 8,641 | R² 0.781 | RMSE 51.2 °C |
+| Ready biodegradability | 1,600 | AUROC 0.899 | accuracy 0.800 |
+| Rat oral LD50 | 11,168 | R² 0.505 | RMSE 0.60 log units |
+| Acidic pKa | 3,154 | R² 0.687 | RMSE 1.98 |
+| Basic pKa | 5,103 | R² 0.810 | RMSE 2.05 |
+
+Two of these deserve a caveat the number alone does not give. **Melting point** is the weakest:
+it depends on how molecules pack in a crystal, which a 2D graph cannot see, so symmetric
+molecules are badly under-predicted — naphthalene comes out near 5 °C against a real 80 °C.
+And the **pKa** models answer for any structure, so a molecule with no acidic proton still gets
+an acidic pKa; the number is meaningless there rather than merely large. Both caveats are shown
+in the UI next to the property.
+
+The pKa models are worth comparing against the alternatives this project rejected. pKaPredict
+managed MAE 2.44 with R² 0.289 — barely better than guessing a constant. These reach MAE 1.27
+and 1.32 with R² 0.69 and 0.81, so they are genuinely predictive. They are still roughly twice
+the error of specialist published pKa models, which report RMSE under 1.
+
+Scores come from a **Bemis-Murcko scaffold split**: molecules sharing a scaffold stay on the same
+side, so the test set measures generalisation to new chemistry rather than to near-copies. A
+random split would read much better and mean much less.
+
+Three things had to be fixed before those scores meant anything, and all three were found by
+looking at the split rather than at the model:
+
+- `MurckoScaffoldSmiles` returns an empty string for *every* acyclic molecule, so treating that
+  as a shared scaffold put methane, ethanol and hexadecane in one group — 49% of the boiling
+  point set. It went wholly into training and left a test set that was systematically
+  ring-containing: train mean 180 °C against test mean 252 °C, and a reported R² of 0.002 that
+  was measuring the population gap, not the model. Each acyclic molecule now stands alone.
+- MolCLR's own fill walks the groups against running cutoffs for train, then valid, then test,
+  but train and valid fill at the same time, so the test branch can never be reached. On this
+  data it returned an **empty test set**. Groups now go to whichever split is furthest below
+  quota.
+- Placing groups in shuffled order let a late, large group overshoot: one benzene scaffold
+  covers a third of the pKa set. Largest groups are placed first.
+
+All seven splits now come out at exactly 80/10/10 with zero scaffold overlap between train and
+test.
+
+MolCLR's own `finetune.py` is not used. It catches only `FileNotFoundError` when loading the
+checkpoint and otherwise prints "Training from scratch", so a wrong path yields a randomly
+initialised model that still reports a score; it z-scores targets only for two named QM
+datasets, which boiling point in °C against an MSE loss needs just as much; and its split is
+unseeded. Here a short checkpoint is a hard error, every regression target is standardised, and
+the split is seeded.
+
+The encoder itself is ported to plain PyTorch in `vendor/molclr/model.py` so torch-geometric
+stays out of the serving image. That port was checked against the reference torch-geometric
+implementation with the pretrained weights loaded — featurization identical atom for atom, and
+encoder outputs matching to 0.0 across chirality, bond directions and a bondless ion.
+`tests/test_molclr.py` pins those outputs so the port cannot drift.
 
 ## Reading the results
 
@@ -151,6 +229,12 @@ Predictions are for research use only.
 
 Apache-2.0 (`LICENSE`) — chosen to match the only third-party source code redistributed here,
 SolTranNet, so the repository is not a mix of licenses.
+
+**One exception.** The two pKa models in `models/pka_*.pt` are fine-tuned on the IUPAC Digitized
+pKa Dataset, which is CC BY-NC 4.0: *Reproduced by permission of the International Union of Pure
+and Applied Chemistry*, © 2022 IUPAC. Those weights are a derivative work of non-commercial data
+and may not be used commercially. Everything else here may. The dataset itself is downloaded at
+training time and is not committed.
 
 Everything else is a dependency, installed rather than redistributed, and keeps its own license:
 RDKit (BSD-3), ADMET-AI (MIT), Ketcher (Apache-2.0). The vendored SolTranNet files keep their

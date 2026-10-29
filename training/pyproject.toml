@@ -1,0 +1,12 @@
+[project]
+name = "molpredict-training"
+version = "0.1.0"
+description = "Fine-tune MolCLR on OPERA endpoints for molpredict"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+    "molpredict-backend",
+]
+
+[tool.uv.sources]
+molpredict-backend = { path = "../backend", editable = true }
