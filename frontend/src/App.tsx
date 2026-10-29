@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { Ketcher } from 'ketcher-core'
 import { fetchModels, predict, type ModelInfo, type PredictResponse } from './api'
-import { MoleculeEditor } from './MoleculeEditor'
 import { ModelCards, Results } from './Results'
+
+// Ketcher inlines its WASM, so it is ~29 MB — the whole page used to stay blank until all of it
+// had parsed. Loading it separately lets the rest of the app (SMILES box, examples, results)
+// work while the editor is still arriving.
+const MoleculeEditor = lazy(() =>
+  import('./MoleculeEditor').then((m) => ({ default: m.MoleculeEditor })),
+)
 
 const EXAMPLES: [string, string][] = [
   ['Aspirin', 'CC(=O)Oc1ccccc1C(=O)O'],
@@ -77,7 +83,9 @@ export default function App() {
       <div className="layout">
         <div className="left">
           <div className="editor">
-            <MoleculeEditor onReady={(k) => (ketcherRef.current = k)} onChange={onEditorChange} />
+            <Suspense fallback={<div className="editor-loading muted">Loading the editor…</div>}>
+              <MoleculeEditor onReady={(k) => (ketcherRef.current = k)} onChange={onEditorChange} />
+            </Suspense>
           </div>
           <form
             className="smiles"
