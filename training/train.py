@@ -305,6 +305,12 @@ TASKS = {
     # From the IUPAC dataset, which is CC BY-NC — see prepare_pka.py.
     "pka_acidic": "regression",
     "pka_basic": "regression",
+    # From EPA's ECOTOX release — see prepare_ecotox.py.
+    "fathead_minnow_lc50": "regression",
+    # Trained but deliberately NOT shipped: filtering leaves 256 chemicals, so the scaffold
+    # test set is 25 molecules and the score (R^2 0.123) is neither good nor measurable. Kept
+    # here so it can be retrained if the dataset grows.
+    "daphnia_magna_lc50": "regression",
 }
 
 if __name__ == "__main__":

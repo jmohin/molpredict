@@ -71,6 +71,21 @@ _PROPERTIES = {
         minimum=0.0,
         maximum=1.0,
     ),
+    "fathead_minnow_lc50": PropertyInfo(
+        id="fathead_minnow_lc50",
+        name="Fathead Minnow LC50",
+        category="Environmental",
+        units="pLC50, -log10(mol/L)",
+        task_type="regression",
+        description=(
+            "Acute lethal concentration to Pimephales promelas over the standard 96-hour test. "
+            "Higher means more toxic, on a molar log scale. Trained on 661 chemicals from EPA's "
+            "ECOTOX release, keeping only measured values — results recorded as a bound, such "
+            "as >100 mg/L, say the LC50 was never reached and were excluded rather than read as "
+            "the number beside the operator."
+        ),
+        dataset_url="https://cfpub.epa.gov/ecotox/",
+    ),
     "rat_oral_ld50": PropertyInfo(
         id="rat_oral_ld50",
         name="Rat Oral LD50",
@@ -166,12 +181,13 @@ class MolCLR(_FineTuned):
         name="MolCLR (fine-tuned here)",
         description=(
             "Self-supervised graph neural network pretrained on 10M molecules, fine-tuned by "
-            "this project on EPA/NIEHS OPERA experimental data — one model per property."
+            "this project on EPA experimental data — one model per property."
         ),
         citation=(
             "Wang, Y.; Wang, J.; Cao, Z.; Barati Farimani, A. Molecular contrastive learning of "
             "representations via graph neural networks. Nat. Mach. Intell. 2022, 4, 279–287. "
-            "Fine-tuned on data from Mansouri, K. et al. OPERA models. J. Cheminform. 2018, 10, 10."
+            "Fine-tuned on data from Mansouri, K. et al. OPERA models. J. Cheminform. 2018, 10, "
+            "10, and from the US EPA ECOTOX Knowledgebase, release 09/15/2026."
         ),
         paper_url="https://doi.org/10.1038/s42256-022-00447-x",
         code_url="https://github.com/yuyangw/MolCLR",

@@ -16,7 +16,7 @@ Draw a molecule, see what recently published AI models predict about it.
 | [SolTranNet](https://github.com/gnina/SolTranNet) (Francoeur & Koes, *JCIM* 2021) | Aqueous solubility (logS), as a second opinion on ADMET-AI's AqSolDB endpoint | Apache-2.0 |
 | [SCScore](https://github.com/connorcoley/scscore) (Coley et al., *JCIM* 2018) | Synthetic complexity (1–5), learned from 12M Reaxys reactions | MIT |
 | [SA_Score](https://github.com/rdkit/rdkit/tree/master/Contrib/SA_Score) (Ertl & Schuffenhauer, *J. Cheminform.* 2009) | Synthetic accessibility (1–10), fragment-based heuristic | BSD-3 |
-| [MolCLR](https://github.com/yuyangw/MolCLR) (Wang et al., *Nat. Mach. Intell.* 2022), fine-tuned here | Boiling point, melting point, vapor pressure, ready biodegradability, rat oral LD50 | MIT (encoder) |
+| [MolCLR](https://github.com/yuyangw/MolCLR) (Wang et al., *Nat. Mach. Intell.* 2022), fine-tuned here | Boiling point, melting point, vapor pressure, ready biodegradability, fathead minnow LC50, rat oral LD50 | MIT (encoder) |
 | MolCLR fine-tuned on the [IUPAC pKa dataset](https://doi.org/10.5281/zenodo.7236453) (Zheng 2022) | Acidic and basic pKa | **CC BY-NC 4.0** |
 
 SolTranNet is vendored **unmodified** under `backend/src/molpredict_backend/vendor/soltrannet/`
@@ -53,11 +53,14 @@ this project on EPA/NIEHS [OPERA](https://github.com/NIEHS/OPERA) experimental d
 per endpoint. `training/` holds the code.
 
 ```bash
-cd training && uv run python prepare_data.py && uv run python train.py
+cd training && uv run python prepare_data.py && uv run python prepare_ecotox.py && uv run python train.py
 ```
 
-`prepare_data.py` pulls OPERA's archive and writes one CSV per endpoint, standardising SMILES
-exactly as the API does so the model is trained on the form it will be asked about. `train.py`
+`prepare_data.py` pulls OPERA's archive and `prepare_ecotox.py` the EPA ECOTOX release (143 MB,
+resumable — the EPA's host dropped the connection partway through every attempt made while
+writing this, and a truncated archive still looks like a zip until something reads its central
+directory). Both write one CSV per endpoint, standardising SMILES exactly as the API does, so
+each model is trained on the form it will be asked about. `train.py`
 fine-tunes and writes `runs/<endpoint>/model.pt`, which carries its own held-out metrics; those
 are the numbers the UI shows beside each prediction, so a score always belongs to the model that
 earned it.
@@ -70,6 +73,7 @@ Held-out scores on that split, which are the numbers the UI shows:
 | Melting point | 22,287 | R² 0.764 | RMSE 56.3 °C |
 | Vapor pressure | 6,643 | R² 0.691 | RMSE 2.20 log units |
 | Ready biodegradability | 1,600 | AUROC 0.899 | accuracy 0.800 |
+| Fathead minnow LC50 | 661 | R² 0.618 | RMSE 1.02 log units |
 | Rat oral LD50 | 11,168 | R² 0.505 | RMSE 0.60 log units |
 | Acidic pKa | 3,154 | R² 0.687 | RMSE 1.98 |
 | Basic pKa | 5,103 | R² 0.810 | RMSE 2.05 |
@@ -100,6 +104,47 @@ the only lever left was the training recipe, and a cosine learning-rate decay ma
 four slightly worse (acidic pKa R² 0.687 → 0.656, basic pKa 0.810 → 0.792, biodegradability
 AUROC 0.899 → 0.895, LD50 0.5045 → 0.509). With identical data, splits and seeds that is a clean
 negative result, so it was not shipped for them.
+
+### Aquatic toxicity, and one model that was not shipped
+
+**Fathead minnow LC50** comes from EPA's [ECOTOX Knowledgebase](https://cfpub.epa.gov/ecotox/),
+whose ASCII release is 143 MB of pipe-delimited tables abstracted from thousands of separate
+published studies. It carries no structures at all — only CAS numbers and DSSTox ids — so SMILES
+come from OPERA's archive, three of whose files carry `CASRN` beside QSAR-ready structures. That
+keeps one structure convention across every endpoint here.
+
+Nearly all the work is in the filters, because ECOTOX holds several kinds of row that look
+numeric and are not comparable:
+
+- **Censored values.** A result of `>100 mg/L` means the LC50 was never reached. The operator
+  lives in its own column, `conc1_mean_op`, while `conc1_mean` holds a bare `100` either way —
+  so a filter that inspects the value cannot see the censoring and keeps every one of these.
+  They cluster at round numbers, so the damage would be systematic rather than noise. 3.7% of
+  all results are censored; 920 were dropped here.
+- **Mixed durations.** A 24-hour and a 96-hour LC50 are different quantities. Fathead minnow
+  results run 3,337 rows at the standard 96 h against 932 at 24 h and 849 at 48 h.
+- **Formulated products.** `conc1_type = F` is the concentration of a commercial formulation,
+  not of the molecule the SMILES describes.
+- **Mixed units**, from ng/L to µM, plus units of a dosed carrier.
+
+A measured 661-chemical dataset survives that. MolCLR earns its place on it, which is worth
+checking rather than assuming at this size:
+
+| Fathead minnow LC50, same scaffold split (test n=66) | MAE | R² |
+|---|---|---|
+| Predict the training mean | 1.367 | −0.046 |
+| Morgan fingerprint + ridge | 1.070 | 0.256 |
+| **MolCLR fine-tuned** | **0.797** | **0.618** |
+
+**Daphnia magna LC50 was built and deliberately not shipped.** The same pipeline yields it
+(`prepare_ecotox.py` writes both CSVs, and `train.py` trains both), but only 256 chemicals
+survive filtering — a third of its rows are formulated products — which leaves a 25-molecule
+test set and R² 0.123. That is better than a fingerprint ridge (−0.517) and than predicting the
+mean (−0.102), and still not a model worth putting a number beside: 25 molecules cannot measure
+one. The code is kept so it can be retrained if the dataset grows.
+
+Unlike the pKa data, ECOTOX carries no non-commercial restriction: EPA's standard position is
+that its data is in the public domain under 17 U.S.C. § 105.
 
 Two endpoints deserve a caveat the number alone does not give. **Melting point** carries the
 largest absolute error: it depends on how molecules pack in a crystal, which a 2D graph cannot
