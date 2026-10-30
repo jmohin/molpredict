@@ -88,11 +88,15 @@ jobs:
             curl -sf http://127.0.0.1:8080/api/health && break
             sleep 2
           done
-          curl -sf http://127.0.0.1:8080/api/health | grep '"models":7'
+          curl -sf http://127.0.0.1:8080/api/health | grep '"models":8'
           curl -sf http://127.0.0.1:8080/ | grep -q '<div id="root">'
           curl -sf -X POST http://127.0.0.1:8080/api/predict \
             -H 'content-type: application/json' \
             -d '{"structure":"CC(=O)Oc1ccccc1C(=O)O"}' | grep -q 'Solubility_AqSolDB'
+          # Glycine is a zwitterion, so its curve must cross zero between its two pKa values.
+          curl -sf -X POST http://127.0.0.1:8080/api/charge \
+            -H 'content-type: application/json' \
+            -d '{"structure":"NCC(=O)O"}' | grep -q '"isoelectric_point":[0-9]'
 
       - name: Container logs on failure
         if: failure()

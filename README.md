@@ -7,6 +7,44 @@ Draw a molecule, see what recently published AI models predict about it.
 - **Backend** (`backend/`): FastAPI + RDKit. Structures are parsed (SMILES or molfile),
   stripped to the largest fragment and neutralized, then sent to every registered model.
 
+## Charge vs. pH
+
+`POST /api/charge` returns net charge across pH 0–14, plotted beside the predictions. Most
+models here answer with one number; this is a curve, so it has its own route rather than being
+forced through the scalar `Predictor` interface.
+
+It needs the pKa of *every* ionisable centre, which is why [MolGpKa](https://github.com/Xundrug/MolGpKa)
+is here: it matches sites with 143 SMARTS patterns and predicts each one separately, averaging
+1.8 sites per molecule and up to 6. The curve is the independent-site sum — an acidic site with
+pKa *a* contributes −1/(1 + 10^(*a* − pH)), a basic site +1/(1 + 10^(pH − *b*)). That is **not** a
+full microspecies equilibrium: neighbouring groups really do shift each other's pKa, and the
+error is largest when ionisable groups sit close together. Commercial tools solve the coupled
+system instead.
+
+Our own pKa models are marked on the same axis, and the disagreement is the point. On glycine:
+
+| | acidic pKa | basic pKa |
+|---|---|---|
+| Experimental | 2.34 | 9.60 |
+| MolCLR (ours) | 3.17 | **2.33** |
+| MolGpKa | 1.97 | **8.57** |
+
+MolCLR is the better model averaged over the IUPAC test set (R² 0.69/0.81 against 0.35/0.38),
+and on this molecule it is badly wrong about the amine while MolGpKa is nearly right. The UI
+flags the 6.24-unit gap rather than quietly picking one.
+
+Three things the curve will not tell you, all surfaced in the panel: molecules matching no
+SMARTS pattern get no curve at all (13% of our pKa test set), sites whose predicted pKa lands
+far outside 0–14 are dropped and counted, and a permanent cation such as a quaternary ammonium
+is carried as a formal charge so its line stays flat instead of starting from zero.
+
+MolGpKa is ported to plain PyTorch in `vendor/molgpka/`, so neither torch-geometric nor
+torch-scatter is installed. Its checkpoints survive that because it defines its own `GCNConv`
+with plain `Parameter`s — the same property that made MolCLR portable, and the one pkasolver
+lacked. `tests/test_molgpka.py` loads both checkpoints with `strict=True`, cross-checks the
+convolution against a dense matrix implementation of the same equation, and pins predictions
+against experimental pKa.
+
 ## Models
 
 | Model | What it predicts | License |
@@ -18,6 +56,7 @@ Draw a molecule, see what recently published AI models predict about it.
 | [SA_Score](https://github.com/rdkit/rdkit/tree/master/Contrib/SA_Score) (Ertl & Schuffenhauer, *J. Cheminform.* 2009) | Synthetic accessibility (1–10), fragment-based heuristic | BSD-3 |
 | [MolCLR](https://github.com/yuyangw/MolCLR) (Wang et al., *Nat. Mach. Intell.* 2022), fine-tuned here | Boiling point, melting point, vapor pressure, ready biodegradability, fathead minnow LC50, rat oral LD50 | MIT (encoder) |
 | MolCLR fine-tuned on the [IUPAC pKa dataset](https://doi.org/10.5281/zenodo.7236453) (Zheng 2022) | Acidic and basic pKa | **CC BY-NC 4.0** |
+| [MolGpKa](https://github.com/Xundrug/MolGpKa) (Pan et al., *JCIM* 2021) | pKa of each ionisable site, which drives the charge-vs-pH curve | MIT |
 
 SolTranNet is vendored **unmodified** under `backend/src/molpredict_backend/vendor/soltrannet/`
 (model code, 60 kB of weights, and its Apache-2.0 license) because the published package imports

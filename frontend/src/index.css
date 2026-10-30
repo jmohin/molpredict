@@ -67,3 +67,29 @@ footer h2 { font-size: 1.1rem; }
 
 .flag { display: block; margin-top: 2px; font-size: 0.72rem; font-weight: 500; color: #b45309; cursor: help; }
 td.value .flag { font-weight: 500; }
+
+/* Charge vs pH */
+.charge { margin-bottom: 20px; }
+.charge h3 { margin: 0 0 6px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.charge-plot { width: 100%; height: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.charge-plot .grid { stroke: var(--border); stroke-width: 1; }
+.charge-plot .axis-zero { stroke: var(--muted); stroke-width: 1; }
+.charge-plot .tick { fill: var(--muted); font-size: 10px; }
+.charge-plot .curve { fill: none; stroke: var(--accent); stroke-width: 2; }
+.charge-plot .ph-marker { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }
+/* Our own models' macro pKa, deliberately a different visual language from the curve. */
+.charge-plot .macro-marker { stroke: #b45309; stroke-width: 1.5; stroke-dasharray: 5 3; }
+.charge-plot .site-acid, .charge-plot .site-acid-dot { stroke: #b91c1c; fill: #b91c1c; stroke-width: 2; }
+.charge-plot .site-base, .charge-plot .site-base-dot { stroke: #1d4ed8; fill: #1d4ed8; stroke-width: 2; }
+.site-acid-text { color: #b91c1c; }
+.site-base-text { color: #1d4ed8; }
+.charge-readout { display: flex; gap: 20px; padding: 8px 12px; }
+.charge-readout div { display: flex; flex-direction: column; gap: 1px; }
+.charge-readout strong { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.site-list { list-style: none; margin: 0 0 6px; padding: 0 12px; font-size: 0.85rem; }
+.site-list li { padding: 1px 0; font-variant-numeric: tabular-nums; }
+.charge .muted { display: block; padding: 0 12px 4px; }
+
+@media (max-width: 700px) {
+  .charge-readout { gap: 12px; flex-wrap: wrap; }
+}

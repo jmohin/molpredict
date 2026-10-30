@@ -10,8 +10,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import chem
+from . import charge, chem
 from .predictors import Predictor, load_predictors
+from .predictors.molgpka import MolGpKa
 
 predictors: list[Predictor] = []
 
@@ -63,6 +64,52 @@ def predict(req: PredictRequest) -> dict:
     except chem.InvalidStructure as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     return {"smiles": smiles, "results": list(_predict(smiles))}
+
+
+@lru_cache(maxsize=1024)
+def _charge(smiles: str) -> dict:
+    """Net charge across pH 0-14, from MolGpKa's per-site pKa values.
+
+    A separate route from /api/predict because this is a curve rather than a number, and the
+    Predictor protocol every model implements returns scalars.
+    """
+    model = next((p for p in predictors if isinstance(p, MolGpKa)), None)
+    if model is None:
+        raise HTTPException(status_code=503, detail="The pKa site model is not loaded.")
+
+    sites, formal = model.sites(smiles)
+    usable = charge.relevant(sites)
+    phs, charges = charge.curve(usable, formal)
+    return {
+        "smiles": smiles,
+        "ph": [round(p, 2) for p in phs],
+        "charge": [round(c, 4) for c in charges],
+        "sites": [
+            {"atom_index": s.atom_index, "kind": s.kind, "pka": round(s.pka, 2)}
+            for s in sorted(usable, key=lambda s: s.pka)
+        ],
+        # Sites whose pKa falls far outside 0-14 are dropped from the curve; saying how many
+        # keeps the plot honest about what it left out.
+        "sites_outside_window": len(sites) - len(usable),
+        "formal_charge": formal,
+        "charge_at_physiological_ph": round(
+            charge.net_charge(usable, charge.PHYSIOLOGICAL_PH, formal), 3
+        ),
+        "isoelectric_point": (
+            round(point, 2)
+            if (point := charge.isoelectric_point(usable, formal)) is not None
+            else None
+        ),
+    }
+
+
+@app.post("/api/charge")
+def charge_curve(req: PredictRequest) -> dict:
+    try:
+        smiles = chem.canonical_smiles(req.structure)
+    except chem.InvalidStructure as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return _charge(smiles)
 
 
 # In the container the built frontend is served from this same app, so the browser sees one

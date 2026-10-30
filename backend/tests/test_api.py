@@ -6,7 +6,16 @@ from fastapi.testclient import TestClient
 from molpredict_backend.api import app, mount_frontend
 
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
-MODEL_IDS = {"rdkit", "admet_ai", "soltrannet", "scscore", "sa_score", "molclr", "molclr_pka"}
+MODEL_IDS = {
+    "rdkit",
+    "admet_ai",
+    "soltrannet",
+    "scscore",
+    "sa_score",
+    "molclr",
+    "molclr_pka",
+    "molgpka",
+}
 
 
 @pytest.fixture(scope="module")

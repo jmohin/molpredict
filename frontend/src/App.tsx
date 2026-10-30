@@ -1,6 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { Ketcher } from 'ketcher-core'
-import { fetchModels, predict, type ModelInfo, type PredictResponse } from './api'
+import {
+  fetchCharge,
+  fetchModels,
+  predict,
+  type ChargeResponse,
+  type ModelInfo,
+  type PredictResponse,
+} from './api'
+import { ChargeCurve } from './ChargeCurve'
 import { ModelCards, Results } from './Results'
 
 // Ketcher inlines its WASM, so it is ~29 MB — the whole page used to stay blank until all of it
@@ -22,6 +30,7 @@ export default function App() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [smilesInput, setSmilesInput] = useState('')
   const [data, setData] = useState<PredictResponse | null>(null)
+  const [charge, setCharge] = useState<ChargeResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const debounce = useRef<number | undefined>(undefined)
@@ -35,6 +44,7 @@ export default function App() {
     inflight.current?.abort()
     if (!structure.trim()) {
       setData(null)
+      setCharge(null)
       setError(null)
       return
     }
@@ -42,8 +52,14 @@ export default function App() {
     inflight.current = ctrl
     setLoading(true)
     try {
-      const res = await predict(structure, ctrl.signal)
+      // Both requests go out together; the predictions are what the page is for, so a failure
+      // to build the charge curve hides that one panel rather than the whole result.
+      const [res, curve] = await Promise.all([
+        predict(structure, ctrl.signal),
+        fetchCharge(structure, ctrl.signal).catch(() => null),
+      ])
       setData(res)
+      setCharge(curve)
       setError(null)
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setError((e as Error).message)
@@ -124,6 +140,7 @@ export default function App() {
             )}
             {loading && <span className="muted"> · predicting…</span>}
           </div>
+          {data && charge && <ChargeCurve charge={charge} data={data} />}
           {data && models.length > 0 && <Results models={models} data={data} />}
         </div>
       </div>
